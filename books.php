@@ -5,16 +5,14 @@ require __DIR__ . '/includes/db.php';
 require __DIR__ . '/includes/auth.php';
 
 require_login();
-$userId = current_user_id();
 
-$stmt = $pdo->prepare(
-    'SELECT b.id, b.title, b.publication_year, b.status, a.name AS author_name
+$stmt = $pdo->query(
+    'SELECT b.id, b.title, b.cover_image, b.user_id,
+            a.first_name, a.last_name
      FROM books b
      JOIN authors a ON a.id = b.author_id
-     WHERE b.user_id = ?
      ORDER BY b.created_at DESC'
 );
-$stmt->execute([$userId]);
 $books = $stmt->fetchAll();
 
 $page_title = 'Boeken';
@@ -23,41 +21,23 @@ require __DIR__ . '/includes/header.php';
 
 <h1>Boeken</h1>
 
-<div class="actions">
-  <a class="btn" href="book_add.php">Boek toevoegen</a>
-</div>
+<a href="book_add.php">Boek toevoegen</a>
 
-<?php if (!$books): ?>
-  <p class="notice">Nog geen boeken toegevoegd.</p>
-<?php else: ?>
-  <div class="card">
-    <table>
-      <thead>
-        <tr>
-          <th>Titel</th>
-          <th>Auteur</th>
-          <th>Jaar</th>
-          <th>Status</th>
-          <th>Acties</th>
-        </tr>
-      </thead>
-      <tbody>
-        <?php foreach ($books as $b): ?>
-          <tr>
-            <td><?= e((string)$b['title']) ?></td>
-            <td><?= e((string)$b['author_name']) ?></td>
-            <td><?= e((string)($b['publication_year'] ?? '')) ?></td>
-            <td><?= e((string)$b['status']) ?></td>
-            <td>
-              <a href="book_edit.php?id=<?= (int)$b['id'] ?>">Bewerk</a>
-              |
-              <a href="book_delete.php?id=<?= (int)$b['id'] ?>">Verwijder</a>
-            </td>
-          </tr>
-        <?php endforeach; ?>
-      </tbody>
-    </table>
-  </div>
-<?php endif; ?>
+<ul>
+<?php foreach ($books as $b): ?>
+  <li>
+    <?php if ($b['cover_image']): ?>
+      <img src="<?= e($b['cover_image']) ?>" width="50">
+    <?php endif; ?>
+    <?= e($b['title']) ?> —
+    <?= e($b['first_name'] . ' ' . $b['last_name']) ?>
+
+    <?php if ($b['user_id'] === $_SESSION['user_id']): ?>
+      | <a href="book_edit.php?id=<?= $b['id'] ?>">Bewerk</a>
+      | <a href="book_delete.php?id=<?= $b['id'] ?>">Verwijder</a>
+    <?php endif; ?>
+  </li>
+<?php endforeach; ?>
+</ul>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

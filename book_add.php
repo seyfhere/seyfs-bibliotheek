@@ -9,51 +9,42 @@ $userId = current_user_id();
 
 $errors = [];
 
-$stmt = $pdo->prepare('SELECT id, name FROM authors WHERE user_id = ? ORDER BY name ASC');
+// authors owned by user
+$stmt = $pdo->prepare(
+    'SELECT id, first_name, last_name
+     FROM authors
+     WHERE user_id = ?
+     ORDER BY last_name'
+);
 $stmt->execute([$userId]);
 $authors = $stmt->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $title = trim((string)($_POST['title'] ?? ''));
+    $title = trim($_POST['title'] ?? '');
     $authorId = (int)($_POST['author_id'] ?? 0);
-    $year = trim((string)($_POST['publication_year'] ?? ''));
-    $status = (string)($_POST['status'] ?? 'wishlist');
+    $status = $_POST['status'] ?? 'wishlist';
 
-    if ($title === '') {
-        $errors[] = 'Titel is verplicht.';
-    }
-    if ($authorId <= 0) {
-        $errors[] = 'Kies een auteur.';
-    }
+    if ($title === '') $errors[] = 'Titel is verplicht.';
+    if ($authorId <= 0) $errors[] = 'Kies een auteur.';
 
-    $validStatus = ['wishlist', 'reading', 'read'];
-    if (!in_array($status, $validStatus, true)) {
-        $status = 'wishlist';
-    }
-
-    $yearVal = null;
-    if ($year !== '') {
-        if (!ctype_digit($year) || (int)$year < 0 || (int)$year > 3000) {
-            $errors[] = 'Publicatiejaar is ongeldig.';
-        } else {
-            $yearVal = (int)$year;
-        }
+    /* IMAGE UPLOAD */
+    $coverPath = null;
+    if (!empty($_FILES['cover']['name'])) {
+        $ext = pathinfo($_FILES['cover']['name'], PATHINFO_EXTENSION);
+        $filename = uniqid('cover_', true) . '.' . $ext;
+        $destination = 'assets/img/' . $filename;
+        move_uploaded_file($_FILES['cover']['tmp_name'], $destination);
+        $coverPath = $destination;
     }
 
     if (!$errors) {
-        $stmt = $pdo->prepare('SELECT id FROM authors WHERE id = ? AND user_id = ?');
-        $stmt->execute([$authorId, $userId]);
-        if (!$stmt->fetch()) {
-            $errors[] = 'Auteur bestaat niet.';
-        } else {
-            $stmt = $pdo->prepare(
-                'INSERT INTO books (user_id, author_id, title, publication_year, status)
-                 VALUES (?, ?, ?, ?, ?)'
-            );
-            $stmt->execute([$userId, $authorId, $title, $yearVal, $status]);
-            header('Location: books.php');
-            exit;
-        }
+        $stmt = $pdo->prepare(
+            'INSERT INTO books (user_id, author_id, title, status, cover_image)
+             VALUES (?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([$userId, $authorId, $title, $status, $coverPath]);
+        header('Location: books.php');
+        exit;
     }
 }
 
@@ -63,60 +54,35 @@ require __DIR__ . '/includes/header.php';
 
 <h1>Boek toevoegen</h1>
 
-<?php if (!$authors): ?>
-  <p class="notice">Je hebt nog geen auteurs. Voeg eerst een auteur toe.</p>
-  <div class="actions">
-    <a class="btn" href="author_add.php">Auteur toevoegen</a>
-  </div>
-<?php else: ?>
+<?php foreach ($errors as $e): ?>
+  <p class="error"><?= e($e) ?></p>
+<?php endforeach; ?>
 
-<?php if ($errors): ?>
-  <div class="error">
-    <ul>
-      <?php foreach ($errors as $err): ?>
-        <li><?= e($err) ?></li>
-      <?php endforeach; ?>
-    </ul>
-  </div>
-<?php endif; ?>
+<form method="post" enctype="multipart/form-data">
+  <label>Titel</label>
+  <input name="title" required>
 
-<div class="card">
-  <form method="post" novalidate>
-    <label for="title">Titel</label>
-    <input id="title" name="title" required value="<?= e((string)($_POST['title'] ?? '')) ?>">
+  <label>Auteur</label>
+  <select name="author_id" required>
+    <option value="">-- kies --</option>
+    <?php foreach ($authors as $a): ?>
+      <option value="<?= $a['id'] ?>">
+        <?= e($a['first_name'] . ' ' . $a['last_name']) ?>
+      </option>
+    <?php endforeach; ?>
+  </select>
 
-    <label for="author_id">Auteur</label>
-    <select id="author_id" name="author_id" required>
-      <option value="">Kies een auteur</option>
-      <?php foreach ($authors as $a): ?>
-        <option value="<?= (int)$a['id'] ?>" <?= ((int)($_POST['author_id'] ?? 0) === (int)$a['id']) ? 'selected' : '' ?>>
-          <?= e((string)$a['name']) ?>
-        </option>
-      <?php endforeach; ?>
-    </select>
+  <label>Status</label>
+  <select name="status">
+    <option value="wishlist">Wishlist</option>
+    <option value="reading">Bezig</option>
+    <option value="read">Gelezen</option>
+  </select>
 
-    <div class="row">
-      <div>
-        <label for="publication_year">Publicatiejaar (optioneel)</label>
-        <input id="publication_year" name="publication_year" inputmode="numeric" value="<?= e((string)($_POST['publication_year'] ?? '')) ?>">
-      </div>
-      <div>
-        <label for="status">Status</label>
-        <select id="status" name="status">
-          <option value="wishlist" <?= (($_POST['status'] ?? 'wishlist') === 'wishlist') ? 'selected' : '' ?>>Wishlist</option>
-          <option value="reading" <?= (($_POST['status'] ?? '') === 'reading') ? 'selected' : '' ?>>Bezig</option>
-          <option value="read" <?= (($_POST['status'] ?? '') === 'read') ? 'selected' : '' ?>>Gelezen</option>
-        </select>
-      </div>
-    </div>
+  <label>Boekcover</label>
+  <input type="file" name="cover" accept="image/*">
 
-    <div class="actions">
-      <button class="btn" type="submit">Opslaan</button>
-      <a class="btn btn-secondary" href="books.php">Annuleren</a>
-    </div>
-  </form>
-</div>
-
-<?php endif; ?>
+  <button type="submit">Opslaan</button>
+</form>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

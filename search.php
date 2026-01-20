@@ -5,22 +5,45 @@ require __DIR__ . '/includes/db.php';
 require __DIR__ . '/includes/auth.php';
 
 require_login();
-$userId = current_user_id();
 
-$q = trim((string)($_GET['q'] ?? ''));
-$results = [];
+/* AUTHORS FOR DROPDOWN (GLOBAL) */
+$stmt = $pdo->query(
+    'SELECT id, first_name, last_name
+     FROM authors
+     ORDER BY last_name, first_name'
+);
+$authors = $stmt->fetchAll();
+
+/* INPUT */
+$q = trim($_GET['q'] ?? '');
+$authorId = (int)($_GET['author_id'] ?? 0);
+
+/* BUILD QUERY */
+$sql = '
+SELECT b.id, b.title, b.cover_image,
+       a.first_name, a.last_name
+FROM books b
+JOIN authors a ON a.id = b.author_id
+WHERE 1=1
+';
+
+$params = [];
 
 if ($q !== '') {
-    $stmt = $pdo->prepare(
-        'SELECT b.id, b.title, b.publication_year, b.status, a.name AS author_name
-         FROM books b
-         JOIN authors a ON a.id = b.author_id
-         WHERE b.user_id = ? AND b.title LIKE ?
-         ORDER BY b.created_at DESC'
-    );
-    $stmt->execute([$userId, '%' . $q . '%']);
-    $results = $stmt->fetchAll();
+    $sql .= ' AND b.title LIKE ?';
+    $params[] = '%' . $q . '%';
 }
+
+if ($authorId > 0) {
+    $sql .= ' AND a.id = ?';
+    $params[] = $authorId;
+}
+
+$sql .= ' ORDER BY b.created_at DESC';
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
+$results = $stmt->fetchAll();
 
 $page_title = 'Zoeken';
 require __DIR__ . '/includes/header.php';
@@ -28,47 +51,40 @@ require __DIR__ . '/includes/header.php';
 
 <h1>Zoeken</h1>
 
-<div class="card">
-  <form method="get">
-    <label for="q">Zoek op titel</label>
-    <input id="q" name="q" value="<?= e($q) ?>" placeholder="Bijv. Clean Code">
-    <div class="actions">
-      <button class="btn" type="submit">Zoek</button>
-      <a class="btn btn-secondary" href="search.php">Reset</a>
-    </div>
-  </form>
-</div>
+<form method="get">
+  <label>Zoek op titel</label>
+  <input name="q" value="<?= e($q) ?>">
 
-<?php if ($q !== ''): ?>
-  <h2>Resultaten</h2>
-  <?php if (!$results): ?>
-    <p class="notice">Geen resultaten.</p>
-  <?php else: ?>
-    <div class="card">
-      <table>
-        <thead>
-          <tr>
-            <th>Titel</th>
-            <th>Auteur</th>
-            <th>Jaar</th>
-            <th>Status</th>
-            <th>Acties</th>
-          </tr>
-        </thead>
-        <tbody>
-          <?php foreach ($results as $r): ?>
-            <tr>
-              <td><?= e((string)$r['title']) ?></td>
-              <td><?= e((string)$r['author_name']) ?></td>
-              <td><?= e((string)($r['publication_year'] ?? '')) ?></td>
-              <td><?= e((string)$r['status']) ?></td>
-              <td><a href="book_edit.php?id=<?= (int)$r['id'] ?>">Bewerk</a></td>
-            </tr>
-          <?php endforeach; ?>
-        </tbody>
-      </table>
-    </div>
-  <?php endif; ?>
+  <label>Auteur</label>
+  <select name="author_id">
+    <option value="">Alle auteurs</option>
+    <?php foreach ($authors as $a): ?>
+      <option value="<?= $a['id'] ?>"
+        <?= $authorId === (int)$a['id'] ? 'selected' : '' ?>>
+        <?= e($a['first_name'] . ' ' . $a['last_name']) ?>
+      </option>
+    <?php endforeach; ?>
+  </select>
+
+  <button type="submit">Zoek</button>
+</form>
+
+<h2>Resultaten</h2>
+
+<?php if (!$results): ?>
+  <p>Geen resultaten.</p>
+<?php else: ?>
+  <ul>
+  <?php foreach ($results as $r): ?>
+    <li>
+      <?php if ($r['cover_image']): ?>
+        <img src="<?= e($r['cover_image']) ?>" width="40">
+      <?php endif; ?>
+      <?= e($r['title']) ?> —
+      <?= e($r['first_name'] . ' ' . $r['last_name']) ?>
+    </li>
+  <?php endforeach; ?>
+  </ul>
 <?php endif; ?>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

@@ -10,23 +10,22 @@ $userId = current_user_id();
 $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $name = trim((string)($_POST['name'] ?? ''));
+    $first = trim($_POST['first_name'] ?? '');
+    $last  = trim($_POST['last_name'] ?? '');
 
-    if ($name === '') {
-        $errors[] = 'Naam is verplicht.';
+    if ($first === '' || $last === '') {
+        $errors[] = 'Voornaam en achternaam zijn verplicht.';
     }
 
     if (!$errors) {
-        $stmt = $pdo->prepare('SELECT id FROM authors WHERE user_id = ? AND name = ?');
-        $stmt->execute([$userId, $name]);
-        if ($stmt->fetch()) {
-            $errors[] = 'Deze auteur bestaat al.';
-        } else {
-            $stmt = $pdo->prepare('INSERT INTO authors (user_id, name) VALUES (?, ?)');
-            $stmt->execute([$userId, $name]);
-            header('Location: authors.php');
-            exit;
-        }
+        $stmt = $pdo->prepare(
+            'INSERT INTO authors (user_id, first_name, last_name)
+             VALUES (?, ?, ?)'
+        );
+        $stmt->execute([$userId, $first, $last]);
+
+        header('Location: authors.php');
+        exit;
     }
 }
 
@@ -39,23 +38,21 @@ require __DIR__ . '/includes/header.php';
 <?php if ($errors): ?>
   <div class="error">
     <ul>
-      <?php foreach ($errors as $err): ?>
-        <li><?= e($err) ?></li>
+      <?php foreach ($errors as $e): ?>
+        <li><?= e($e) ?></li>
       <?php endforeach; ?>
     </ul>
   </div>
 <?php endif; ?>
 
-<div class="card">
-  <form method="post" novalidate>
-    <label for="name">Naam</label>
-    <input id="name" name="name" required value="<?= e((string)($_POST['name'] ?? '')) ?>">
+<form method="post">
+  <label>Voornaam</label>
+  <input name="first_name" required>
 
-    <div class="actions">
-      <button class="btn" type="submit">Opslaan</button>
-      <a class="btn btn-secondary" href="authors.php">Terug</a>
-    </div>
-  </form>
-</div>
+  <label>Achternaam</label>
+  <input name="last_name" required>
+
+  <button type="submit">Opslaan</button>
+</form>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>
